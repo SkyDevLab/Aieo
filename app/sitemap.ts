@@ -1,6 +1,7 @@
 import { MetadataRoute } from 'next';
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://aieo-checker.skydevlab.com';
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL || 'https://website-aieo.vercel.app';
 
 export default function sitemap(): MetadataRoute.Sitemap {
   return [
