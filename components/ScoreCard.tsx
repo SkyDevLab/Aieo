@@ -34,14 +34,14 @@ export const ScoreCard: React.FC<ScoreCardProps> = ({ report, onReset }) => {
   };
 
   const copySummary = () => {
-    const summaryText = `AIEO Readiness Report for ${report.url}
+    const summaryText = `Website AIEO Checker Report for ${report.url}
 Overall Readiness Score: ${report.score}/100 (${report.rating.label})
 • AI Crawlability: ${report.categories.crawlability.score}/100
 • Content Structure: ${report.categories.content.score}/100
 • Structured Data: ${report.categories.structuredData.score}/100
 • Entity Clarity: ${report.categories.entity.score}/100
 • Answer Readiness: ${report.categories.answerReadiness.score}/100
-Audited by AIEO Checker (SkyDevLab)`;
+Audited by Website AIEO Checker (Built by SkyDevLab)`;
 
     navigator.clipboard.writeText(summaryText);
     setCopied(true);
@@ -212,7 +212,7 @@ Audited by AIEO Checker (SkyDevLab)`;
           <AlertCircle className="w-4 h-4 text-brand-400 flex-shrink-0 mt-0.5" />
           <p className="leading-relaxed">
             <strong className="text-slate-300 font-medium">Evaluation Disclaimer: </strong>
-            AIEO Checker evaluates publicly accessible technical and content signals. It does not measure or guarantee visibility, ranking, citation, or recommendation by any specific AI system (ChatGPT, Gemini, Claude, Perplexity, Google AI Overviews).
+            Website AIEO Checker evaluates publicly accessible website signals. It does not measure or guarantee ranking, citation, visibility, or recommendation by any specific AI search system.
           </p>
         </div>
       </div>

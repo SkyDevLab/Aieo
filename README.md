@@ -1,14 +1,14 @@
-# AIEO Checker — AI Engine Optimization Auditing Tool
+# Website AIEO Checker — Free AI Search & AEO Website Audit Tool
 
-> **Check how understandable your website is to AI search engines.**  
-> Built by **SkyDevLab** | Created by **Surya Pratap Singh**
+> **Audit your website for AI search readiness, entity clarity, structured data, content structure, and answer readiness.**  
+> Built by **SkyDevLab**
 
 Free, production-ready website auditor that analyzes website crawlability, structured data, entity clarity, content structure, and answer readiness for AI search crawlers and retrieval-augmented generation (RAG) pipelines.
 
 ---
 
 ## ⚠️ Important Disclaimer
-**AIEO Checker evaluates publicly accessible technical and content signals.**  
+**Website AIEO Checker evaluates publicly accessible technical and content signals.**  
 It does **NOT** measure, promise, or predict whether ChatGPT, Gemini, Claude, Perplexity, Google AI Overviews, etc., will cite, rank, or recommend a website. The score represents technical + semantic signals that make a website easier for automated AI systems to crawl, parse, disambiguate, and extract information from.
 
 ---
@@ -208,7 +208,6 @@ npm start
 
 ## 📄 License & Credits
 
-- **Product:** AIEO Checker
+- **Product:** Website AIEO Checker
 - **Brand:** SkyDevLab
-- **Lead Developer:** Surya Pratap Singh
 - **License:** MIT License

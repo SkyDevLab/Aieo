@@ -1,16 +1,24 @@
 import * as cheerio from 'cheerio';
 
 export interface RawJsonLdObject {
-  raw: unknown;
+  raw: Record<string, unknown>;
+  id?: string;
   context?: string;
   type?: string;
   name?: string;
-  url?: string;
-  sameAs?: string[];
   description?: string;
+  url?: string;
+  image?: string;
+  sameAs?: string[];
   author?: unknown;
   publisher?: unknown;
-  hasErrors?: boolean;
+  brand?: unknown;
+  offers?: unknown;
+  aggregateRating?: unknown;
+  address?: unknown;
+  contactPoint?: unknown;
+  mainEntity?: unknown;
+  mainEntityOfPage?: unknown;
 }
 
 export interface ParsedJsonLdData {
@@ -29,31 +37,19 @@ export interface ParsedJsonLdData {
   webSiteSchemas: RawJsonLdObject[];
   webPageSchemas: RawJsonLdObject[];
   articleSchemas: RawJsonLdObject[];
+  blogPostingSchemas: RawJsonLdObject[];
   productSchemas: RawJsonLdObject[];
+  serviceSchemas: RawJsonLdObject[];
+  softwareAppSchemas: RawJsonLdObject[];
   faqPageSchemas: RawJsonLdObject[];
   breadcrumbSchemas: RawJsonLdObject[];
   localBusinessSchemas: RawJsonLdObject[];
+  eventSchemas: RawJsonLdObject[];
+  courseSchemas: RawJsonLdObject[];
+  profilePageSchemas: RawJsonLdObject[];
   consistencyIssues: string[];
 }
 
-const SUPPORTED_TYPES = [
-  'Person',
-  'Organization',
-  'WebSite',
-  'WebPage',
-  'Article',
-  'NewsArticle',
-  'BlogPosting',
-  'Product',
-  'FAQPage',
-  'BreadcrumbList',
-  'LocalBusiness',
-  'SoftwareApplication',
-] as const;
-
-/**
- * Normalizes Schema.org type names (e.g. "https://schema.org/Person" -> "Person")
- */
 function normalizeType(typeStr: unknown): string[] {
   if (!typeStr) return [];
   if (Array.isArray(typeStr)) {
@@ -66,9 +62,6 @@ function normalizeType(typeStr: unknown): string[] {
   return [];
 }
 
-/**
- * Safely extracts string array for sameAs
- */
 function extractSameAs(sameAsVal: unknown): string[] {
   if (!sameAsVal) return [];
   if (typeof sameAsVal === 'string') return [sameAsVal];
@@ -78,9 +71,15 @@ function extractSameAs(sameAsVal: unknown): string[] {
   return [];
 }
 
-/**
- * Recursively flattens JSON-LD nodes (handles @graph, nested items, etc.)
- */
+function extractImage(imageVal: unknown): string | undefined {
+  if (typeof imageVal === 'string') return imageVal;
+  if (imageVal && typeof imageVal === 'object') {
+    const rec = imageVal as Record<string, unknown>;
+    if (typeof rec['url'] === 'string') return rec['url'];
+  }
+  return undefined;
+}
+
 function flattenJsonLdNodes(item: unknown, collected: RawJsonLdObject[]) {
   if (!item || typeof item !== 'object') return;
 
@@ -100,30 +99,41 @@ function flattenJsonLdNodes(item: unknown, collected: RawJsonLdObject[]) {
 
   const types = normalizeType(record['@type']);
   const context = typeof record['@context'] === 'string' ? record['@context'] : undefined;
+  const id = typeof record['@id'] === 'string' ? record['@id'] : undefined;
   const name = typeof record['name'] === 'string' ? record['name'] : undefined;
-  const url = typeof record['url'] === 'string' ? record['url'] : undefined;
   const description = typeof record['description'] === 'string' ? record['description'] : undefined;
+  const url = typeof record['url'] === 'string' ? record['url'] : undefined;
+  const image = extractImage(record['image']);
   const sameAs = extractSameAs(record['sameAs']);
 
-  if (types.length > 0 || name || url) {
+  if (types.length > 0 || name || url || id) {
     for (const type of types.length > 0 ? types : ['Thing']) {
       collected.push({
         raw: record,
+        id,
         context,
         type,
         name,
-        url,
-        sameAs,
         description,
+        url,
+        image,
+        sameAs,
         author: record['author'],
         publisher: record['publisher'],
+        brand: record['brand'],
+        offers: record['offers'],
+        aggregateRating: record['aggregateRating'],
+        address: record['address'],
+        contactPoint: record['contactPoint'],
+        mainEntity: record['mainEntity'],
+        mainEntityOfPage: record['mainEntityOfPage'],
       });
     }
   }
 
-  // Also inspect child objects like mainEntity, publisher, author
-  for (const key of Object.keys(record)) {
-    if (['author', 'publisher', 'mainEntity', 'creator'].includes(key)) {
+  // Inspect nested properties that often house sub-entities
+  for (const key of ['author', 'publisher', 'mainEntity', 'creator', 'founder', 'brand', 'serviceArea']) {
+    if (record[key]) {
       flattenJsonLdNodes(record[key], collected);
     }
   }
@@ -175,22 +185,31 @@ export function parseJsonLd(html: string): ParsedJsonLdData {
 
   const personSchemas = flattened.filter((o) => o.type === 'Person');
   const organizationSchemas = flattened.filter((o) =>
-    o.type === 'Organization' || o.type === 'LocalBusiness' || o.type === 'Corporation'
+    o.type === 'Organization' || o.type === 'Corporation' || o.type === 'EducationalOrganization'
+  );
+  const localBusinessSchemas = flattened.filter((o) =>
+    o.type === 'LocalBusiness' || o.type?.endsWith('Store') || o.type?.endsWith('Restaurant')
   );
   const webSiteSchemas = flattened.filter((o) => o.type === 'WebSite');
   const webPageSchemas = flattened.filter((o) => o.type === 'WebPage');
   const articleSchemas = flattened.filter((o) =>
-    ['Article', 'NewsArticle', 'BlogPosting'].includes(o.type || '')
+    ['Article', 'NewsArticle', 'TechArticle'].includes(o.type || '')
   );
+  const blogPostingSchemas = flattened.filter((o) => o.type === 'BlogPosting');
   const productSchemas = flattened.filter((o) => o.type === 'Product');
+  const serviceSchemas = flattened.filter((o) => o.type === 'Service');
+  const softwareAppSchemas = flattened.filter((o) =>
+    o.type === 'SoftwareApplication' || o.type === 'WebApplication' || o.type === 'MobileApplication'
+  );
   const faqPageSchemas = flattened.filter((o) => o.type === 'FAQPage');
   const breadcrumbSchemas = flattened.filter((o) => o.type === 'BreadcrumbList');
-  const localBusinessSchemas = flattened.filter((o) => o.type === 'LocalBusiness');
+  const eventSchemas = flattened.filter((o) => o.type === 'Event');
+  const courseSchemas = flattened.filter((o) => o.type === 'Course');
+  const profilePageSchemas = flattened.filter((o) => o.type === 'ProfilePage');
 
   // Consistency checks
   const consistencyIssues: string[] = [];
 
-  // Check if Person or Organization schemas lack names
   for (const p of personSchemas) {
     if (!p.name) {
       consistencyIssues.push('A Person schema is declared without a "name" property.');
@@ -199,6 +218,11 @@ export function parseJsonLd(html: string): ParsedJsonLdData {
   for (const org of organizationSchemas) {
     if (!org.name) {
       consistencyIssues.push('An Organization schema is declared without a "name" property.');
+    }
+  }
+  for (const prod of productSchemas) {
+    if (!prod.name) {
+      consistencyIssues.push('A Product schema is declared without a "name" property.');
     }
   }
 
@@ -218,10 +242,16 @@ export function parseJsonLd(html: string): ParsedJsonLdData {
     webSiteSchemas,
     webPageSchemas,
     articleSchemas,
+    blogPostingSchemas,
     productSchemas,
+    serviceSchemas,
+    softwareAppSchemas,
     faqPageSchemas,
     breadcrumbSchemas,
     localBusinessSchemas,
+    eventSchemas,
+    courseSchemas,
+    profilePageSchemas,
     consistencyIssues,
   };
 }

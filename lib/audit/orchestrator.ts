@@ -9,7 +9,7 @@ import { auditStructuredData } from './structured-data';
 import { auditEntity } from './entity';
 import { auditAnswerReadiness } from './answer-readiness';
 import { compileAuditReport } from './scoring';
-import { AuditReport } from './types';
+import { AuditReport, TechnicalEvidence } from './types';
 
 export interface AuditProgressEvent {
   step:
@@ -91,7 +91,8 @@ export async function runFullAudit(
   const sitemapData = parseSitemap(
     sitemapFetch?.body || '',
     sitemapFetch?.status || 404,
-    discoveredSitemapUrl
+    discoveredSitemapUrl,
+    origin
   );
 
   // Step 4: Parsing structured data
@@ -119,7 +120,7 @@ export async function runFullAudit(
     details: 'llms.txt is an optional developer convention for LLM context.',
   };
 
-  // Run audit rules
+  // Run audit rules across all 5 categories
   const crawlabilityChecks = auditCrawlability({
     targetUrl: pageResult.finalUrl,
     pageFetchResult: pageResult,
@@ -156,6 +157,26 @@ export async function runFullAudit(
     timestamp: Date.now(),
   });
 
+  const technicalEvidence: TechnicalEvidence = {
+    httpStatus: pageResult.status,
+    finalUrl: pageResult.finalUrl,
+    canonicalUrl: htmlData.canonicalUrl,
+    isHttps: pageResult.isHttps,
+    redirectCount: pageResult.redirectCount,
+    robotsStatus: robotsData.status,
+    robotsUrl: robotsData.url,
+    sitemapStatus: sitemapData.status,
+    sitemapUrl: sitemapData.url,
+    jsonLdTypes: jsonLdData.detectedTypes,
+    title: htmlData.title,
+    h1: htmlData.h1List[0] || null,
+    language: htmlData.language,
+    contentLengthBytes: htmlData.rawHtmlLength,
+    wordCount: htmlData.wordCount,
+    textToHtmlRatio: htmlData.textToHtmlRatio,
+    metaRobots: htmlData.metaRobots.raw,
+  };
+
   const report = compileAuditReport({
     url: pageResult.finalUrl,
     durationMs: Date.now() - startTime,
@@ -166,7 +187,12 @@ export async function runFullAudit(
     answerReadinessChecks: answerResult.checks,
     detectedSchemas: jsonLdData.detectedTypes,
     entitySummary: entityResult.entitySummary,
-    answerReadinessSummary: answerResult.summary,
+    entityGraph: entityResult.entityGraph,
+    answerCoverage: answerResult.answerCoverage,
+    entityIntentCoverage: answerResult.entityIntentCoverage,
+    evidenceSignals: answerResult.evidenceSignals,
+    informationArchitecture: answerResult.informationArchitecture,
+    technicalEvidence,
     llmsTxtStatus,
   });
 

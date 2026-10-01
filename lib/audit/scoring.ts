@@ -4,7 +4,12 @@ import {
   AuditRuleResult,
   CategorySummary,
   EntitySummary,
-  AnswerReadinessSummary,
+  EntityGraph,
+  AnswerCoverageSummary,
+  EntityIntentCoverage,
+  EvidenceSignalsSummary,
+  InformationArchitectureSummary,
+  TechnicalEvidence,
 } from './types';
 
 export interface ScoreEngineInput {
@@ -17,7 +22,12 @@ export interface ScoreEngineInput {
   answerReadinessChecks: AuditRuleResult[];
   detectedSchemas: string[];
   entitySummary: EntitySummary;
-  answerReadinessSummary: AnswerReadinessSummary;
+  entityGraph: EntityGraph;
+  answerCoverage: AnswerCoverageSummary;
+  entityIntentCoverage: EntityIntentCoverage;
+  evidenceSignals: EvidenceSignalsSummary;
+  informationArchitecture: InformationArchitectureSummary;
+  technicalEvidence: TechnicalEvidence;
   llmsTxtStatus: AuditReport['llmsTxtStatus'];
 }
 
@@ -185,7 +195,12 @@ export function compileAuditReport(input: ScoreEngineInput): AuditReport {
     },
     detectedSchemas: input.detectedSchemas,
     entitySummary: input.entitySummary,
-    answerReadinessSummary: input.answerReadinessSummary,
+    entityGraph: input.entityGraph,
+    answerCoverage: input.answerCoverage,
+    entityIntentCoverage: input.entityIntentCoverage,
+    evidenceSignals: input.evidenceSignals,
+    informationArchitecture: input.informationArchitecture,
+    technicalEvidence: input.technicalEvidence,
     llmsTxtStatus: input.llmsTxtStatus,
   };
 }

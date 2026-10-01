@@ -10,11 +10,11 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        background: '#090d16',
-        surface: '#0f172a',
-        'surface-card': '#111b33',
-        'surface-border': '#1e293b',
-        'surface-hover': '#1e2942',
+        background: 'var(--bg-app)',
+        surface: 'var(--bg-surface)',
+        'surface-card': 'var(--bg-surface-card)',
+        'surface-border': 'var(--border-subtle)',
+        'surface-hover': 'var(--bg-surface-hover)',
         brand: {
           50: '#eef2ff',
           100: '#e0e7ff',
@@ -35,11 +35,11 @@ const config: Config = {
       },
       animation: {
         'pulse-subtle': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-        'fade-in': 'fadeIn 0.3s ease-out forwards',
+        'fade-in': 'fadeIn 0.2s ease-out forwards',
       },
       keyframes: {
         fadeIn: {
-          '0%': { opacity: '0', transform: 'translateY(6px)' },
+          '0%': { opacity: '0', transform: 'translateY(4px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
       },

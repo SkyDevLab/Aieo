@@ -25,22 +25,22 @@ export const AuditProgress: React.FC<AuditProgressProps> = ({
   analyzedUrl,
 }) => {
   return (
-    <div className="w-full max-w-2xl mx-auto my-8 p-6 md:p-8 rounded-2xl bg-surface/80 border border-surface-border shadow-2xl backdrop-blur-xl animate-fade-in">
-      <div className="flex items-center space-x-3 mb-6">
-        <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-brand-500/10 border border-brand-500/20 text-brand-400">
-          <Loader2 className="w-5 h-5 animate-spin text-brand-400" />
+    <div className="w-full max-w-2xl mx-auto my-6 p-6 rounded-xl bg-white dark:bg-surface border border-slate-200 dark:border-slate-800 shadow-sm animate-fade-in">
+      <div className="flex items-center space-x-3 mb-5 pb-4 border-b border-slate-200 dark:border-slate-800">
+        <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-brand-50 dark:bg-brand-950/40 text-brand-600 dark:text-brand-400 border border-brand-200 dark:border-brand-800">
+          <Loader2 className="w-4 h-4 animate-spin" />
         </div>
         <div>
-          <h3 className="text-lg font-semibold text-slate-100">
-            Analyzing website...
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
+            Auditing website...
           </h3>
-          <p className="text-xs text-slate-400 truncate max-w-md font-mono">
+          <p className="text-xs text-slate-500 dark:text-slate-400 truncate max-w-md font-mono">
             {analyzedUrl}
           </p>
         </div>
       </div>
 
-      <div className="space-y-3.5">
+      <div className="space-y-2">
         {AUDIT_STEPS.map((step, idx) => {
           const isDone = completedSteps.has(step.key);
           const isCurrent = currentStep === step.key && !isDone;
@@ -48,27 +48,25 @@ export const AuditProgress: React.FC<AuditProgressProps> = ({
           return (
             <div
               key={step.key}
-              className={`flex items-center justify-between p-3 rounded-lg border transition-all duration-300 ${
+              className={`flex items-center justify-between p-2.5 rounded-lg border text-xs transition-colors ${
                 isDone
-                  ? 'bg-emerald-950/20 border-emerald-800/30 text-emerald-300'
+                  ? 'bg-emerald-50/60 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
                   : isCurrent
-                  ? 'bg-brand-950/30 border-brand-500/40 text-brand-200'
-                  : 'bg-slate-900/40 border-slate-800/40 text-slate-500'
+                  ? 'bg-brand-50/60 dark:bg-brand-950/30 border-brand-200 dark:border-brand-800 text-brand-800 dark:text-brand-200 font-medium'
+                  : 'bg-slate-50/50 dark:bg-slate-900/40 border-slate-200/60 dark:border-slate-800 text-slate-400'
               }`}
             >
-              <div className="flex items-center space-x-3">
+              <div className="flex items-center space-x-2.5">
                 {isDone ? (
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
                 ) : isCurrent ? (
-                  <Loader2 className="w-4 h-4 animate-spin text-brand-400 flex-shrink-0" />
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-brand-600 dark:text-brand-400 flex-shrink-0" />
                 ) : (
-                  <Circle className="w-4 h-4 text-slate-600 flex-shrink-0" />
+                  <Circle className="w-3.5 h-3.5 text-slate-300 dark:text-slate-700 flex-shrink-0" />
                 )}
-                <span className="text-sm font-medium">
-                  {step.label}
-                </span>
+                <span>{step.label}</span>
               </div>
-              <span className="text-xs font-mono font-medium opacity-60">
+              <span className="font-mono opacity-60 text-[10px]">
                 0{idx + 1}
               </span>
             </div>
@@ -76,12 +74,12 @@ export const AuditProgress: React.FC<AuditProgressProps> = ({
         })}
       </div>
 
-      <div className="mt-6 pt-4 border-t border-surface-border/60 flex items-center justify-between text-xs text-slate-400">
+      <div className="mt-4 pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
         <span className="flex items-center space-x-1.5">
-          <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span>Real-time heuristic evaluation</span>
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" />
+          <span>Real-time deterministic heuristics</span>
         </span>
-        <span>Zero simulated delays</span>
+        <span className="font-mono">Open Engine</span>
       </div>
     </div>
   );

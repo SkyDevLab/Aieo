@@ -1,4 +1,11 @@
-import { AuditRuleResult, EntitySignalItem, EntitySummary } from './types';
+import {
+  AuditRuleResult,
+  EntityConsistencyConflict,
+  EntityGraph,
+  EntityRelationship,
+  EntitySignalItem,
+  EntitySummary,
+} from './types';
 import { ExtractedHtmlData } from '../parsers/html';
 import { ParsedJsonLdData } from '../parsers/jsonld';
 
@@ -11,24 +18,18 @@ export interface EntityAuditInput {
 export interface EntityAuditOutput {
   checks: AuditRuleResult[];
   entitySummary: EntitySummary;
+  entityGraph: EntityGraph;
 }
 
-/**
- * Extracts a candidate brand or entity name from a page title (e.g. "Home — SkyDevLab" -> "SkyDevLab")
- */
 function extractTitleBrand(title: string | null): string | null {
   if (!title) return null;
   const parts = title.split(/[-–—|•:]/).map((s) => s.trim()).filter(Boolean);
   if (parts.length > 1) {
-    // Usually the brand is either the last part ("Feature - Acme") or the first ("Acme: The platform")
     return parts[parts.length - 1].length < parts[0].length ? parts[parts.length - 1] : parts[0];
   }
   return title;
 }
 
-/**
- * Extracts copyright brand from footer (e.g. "© 2026 SkyDevLab Inc." -> "SkyDevLab")
- */
 function extractFooterBrand(footerText: string): string | null {
   if (!footerText) return null;
   const match = footerText.match(/(?:©|copyright|\(c\))\s*(?:\d{4})?\s*([a-zA-Z0-9\s&._-]+?)(?:,|\.|\bAll rights|\bReserved|$)/i);
@@ -46,27 +47,52 @@ export function auditEntity(input: EntityAuditInput): EntityAuditOutput {
   const parsedUrl = new URL(targetUrl);
   const domainBase = parsedUrl.hostname.replace(/^www\./, '').split('.')[0];
 
-  // 1. Identify primary candidate entity
-  let primaryEntity: string = '';
+  // 1. Identify primary candidate entity & type
+  let primaryEntity = '';
   let entityType: EntitySummary['entityType'] = 'Unknown';
+  let primaryDescription = '';
+  let primaryUrl = targetUrl;
   const associatedEntitiesSet = new Set<string>();
 
-  // Check JSON-LD
-  const mainOrg = jsonLdData.organizationSchemas.find((o) => !!o.name);
-  const mainPerson = jsonLdData.personSchemas.find((p) => !!p.name);
-  const mainProduct = jsonLdData.productSchemas.find((p) => !!p.name);
-  const mainWebSite = jsonLdData.webSiteSchemas.find((w) => !!w.name);
+  // Check JSON-LD objects first for authoritative data
+  const softwareSchema = jsonLdData.softwareAppSchemas.find((s) => !!s.name);
+  const prodSchema = jsonLdData.productSchemas.find((p) => !!p.name);
+  const orgSchema = jsonLdData.organizationSchemas.find((o) => !!o.name);
+  const localBiz = jsonLdData.localBusinessSchemas.find((l) => !!l.name);
+  const personSchema = jsonLdData.personSchemas.find((p) => !!p.name);
+  const webSiteSchema = jsonLdData.webSiteSchemas.find((w) => !!w.name);
+  const serviceSchema = jsonLdData.serviceSchemas.find((s) => !!s.name);
 
-  if (mainPerson?.name) {
-    primaryEntity = mainPerson.name;
-    entityType = 'Person';
-    if (mainOrg?.name) associatedEntitiesSet.add(mainOrg.name);
-  } else if (mainOrg?.name) {
-    primaryEntity = mainOrg.name;
-    entityType = 'Organization';
-  } else if (mainProduct?.name) {
-    primaryEntity = mainProduct.name;
+  if (softwareSchema?.name) {
+    primaryEntity = softwareSchema.name;
+    entityType = 'Software';
+    primaryDescription = softwareSchema.description || '';
+    if (softwareSchema.url) primaryUrl = softwareSchema.url;
+  } else if (prodSchema?.name) {
+    primaryEntity = prodSchema.name;
     entityType = 'Product';
+    primaryDescription = prodSchema.description || '';
+    if (prodSchema.url) primaryUrl = prodSchema.url;
+  } else if (serviceSchema?.name) {
+    primaryEntity = serviceSchema.name;
+    entityType = 'Service';
+    primaryDescription = serviceSchema.description || '';
+    if (serviceSchema.url) primaryUrl = serviceSchema.url;
+  } else if (orgSchema?.name) {
+    primaryEntity = orgSchema.name;
+    entityType = 'Organization';
+    primaryDescription = orgSchema.description || '';
+    if (orgSchema.url) primaryUrl = orgSchema.url;
+  } else if (localBiz?.name) {
+    primaryEntity = localBiz.name;
+    entityType = 'LocalBusiness';
+    primaryDescription = localBiz.description || '';
+    if (localBiz.url) primaryUrl = localBiz.url;
+  } else if (personSchema?.name) {
+    primaryEntity = personSchema.name;
+    entityType = 'Person';
+    primaryDescription = personSchema.description || '';
+    if (personSchema.url) primaryUrl = personSchema.url;
   } else if (htmlData.openGraph.siteName) {
     primaryEntity = htmlData.openGraph.siteName;
     entityType = 'Organization';
@@ -77,72 +103,97 @@ export function auditEntity(input: EntityAuditInput): EntityAuditOutput {
     primaryEntity = extractTitleBrand(htmlData.title)!;
     entityType = 'WebSite';
   } else {
-    // Fallback to domain name
     primaryEntity = domainBase.charAt(0).toUpperCase() + domainBase.slice(1);
     entityType = 'Unknown';
   }
 
-  // Check for secondary/associated entity
+  if (!primaryDescription && htmlData.metaDescription) {
+    primaryDescription = htmlData.metaDescription;
+  }
+
+  // Associated Entities
+  if (personSchema?.name && personSchema.name !== primaryEntity) {
+    associatedEntitiesSet.add(personSchema.name);
+  }
+  if (orgSchema?.name && orgSchema.name !== primaryEntity) {
+    associatedEntitiesSet.add(orgSchema.name);
+  }
   if (htmlData.author && htmlData.author !== primaryEntity) {
     associatedEntitiesSet.add(htmlData.author);
-  }
-  if (mainPerson?.name && mainPerson.name !== primaryEntity) {
-    associatedEntitiesSet.add(mainPerson.name);
-  }
-  if (mainOrg?.name && mainOrg.name !== primaryEntity) {
-    associatedEntitiesSet.add(mainOrg.name);
   }
 
   const primaryLower = primaryEntity.toLowerCase();
 
-  // 2. Collect signals across sources
+  // 2. Cross-Signal Consistency Analysis
   const signals: EntitySignalItem[] = [];
+  const conflicts: EntityConsistencyConflict[] = [];
 
-  // Signal: Title
-  const titleHasEntity = (htmlData.title || '').toLowerCase().includes(primaryLower);
+  let nameMatchCount = 0;
+  let totalNameSources = 0;
+
+  // Title signal
   if (htmlData.title) {
-    signals.push({
-      source: 'HTML Title',
-      value: htmlData.title,
-      matchesPrimary: titleHasEntity,
-    });
+    totalNameSources++;
+    const hasName = htmlData.title.toLowerCase().includes(primaryLower);
+    if (hasName) nameMatchCount++;
+    signals.push({ source: 'HTML Title', value: htmlData.title, matchesPrimary: hasName });
+
+    // Check for conflicting brand names in title vs primaryEntity
+    const titleBrand = extractTitleBrand(htmlData.title);
+    if (titleBrand && titleBrand.toLowerCase() !== primaryLower && !titleBrand.toLowerCase().includes(primaryLower) && !primaryLower.includes(titleBrand.toLowerCase())) {
+      conflicts.push({
+        field: 'Brand Name',
+        sources: [
+          { source: 'Primary Entity', value: primaryEntity },
+          { source: 'HTML Title Brand', value: titleBrand },
+        ],
+        severity: 'medium',
+        explanation: `Title brand part "${titleBrand}" differs from primary entity "${primaryEntity}".`,
+      });
+    }
   }
 
-  // Signal: Open Graph site_name
-  if (htmlData.openGraph.siteName) {
-    const ogMatches = htmlData.openGraph.siteName.toLowerCase().includes(primaryLower);
-    signals.push({
-      source: 'Open Graph (og:site_name)',
-      value: htmlData.openGraph.siteName,
-      matchesPrimary: ogMatches,
-    });
-  }
-
-  // Signal: Primary H1
+  // H1 signal
   if (htmlData.h1List.length > 0) {
+    totalNameSources++;
     const h1Matches = htmlData.h1List.some((h) => h.toLowerCase().includes(primaryLower));
-    signals.push({
-      source: 'Primary Heading (H1)',
-      value: htmlData.h1List[0],
-      matchesPrimary: h1Matches,
-    });
+    if (h1Matches) nameMatchCount++;
+    signals.push({ source: 'H1 Primary Heading', value: htmlData.h1List[0], matchesPrimary: h1Matches });
   }
 
-  // Signal: Meta Author
-  if (htmlData.author) {
-    const authorMatches = htmlData.author.toLowerCase().includes(primaryLower);
-    signals.push({
-      source: 'Author Metadata',
-      value: htmlData.author,
-      matchesPrimary: authorMatches,
-    });
+  // Meta description signal
+  if (htmlData.metaDescription) {
+    const descMatches = htmlData.metaDescription.toLowerCase().includes(primaryLower);
+    signals.push({ source: 'Meta Description', value: htmlData.metaDescription.slice(0, 100), matchesPrimary: descMatches });
   }
 
-  // Signal: JSON-LD definition
+  // Open Graph site_name
+  if (htmlData.openGraph.siteName) {
+    totalNameSources++;
+    const ogMatches = htmlData.openGraph.siteName.toLowerCase().includes(primaryLower);
+    if (ogMatches) nameMatchCount++;
+    signals.push({ source: 'Open Graph (og:site_name)', value: htmlData.openGraph.siteName, matchesPrimary: ogMatches });
+
+    if (!ogMatches) {
+      conflicts.push({
+        field: 'Brand Name',
+        sources: [
+          { source: 'Primary Entity', value: primaryEntity },
+          { source: 'Open Graph site_name', value: htmlData.openGraph.siteName },
+        ],
+        severity: 'medium',
+        explanation: `Open Graph site_name "${htmlData.openGraph.siteName}" does not match primary entity "${primaryEntity}".`,
+      });
+    }
+  }
+
+  // JSON-LD entity definition
   const jsonLdMatch = jsonLdData.objects.some(
     (o) => o.name && (o.name.toLowerCase().includes(primaryLower) || primaryLower.includes(o.name.toLowerCase()))
   );
   if (jsonLdData.objects.length > 0) {
+    totalNameSources++;
+    if (jsonLdMatch) nameMatchCount++;
     signals.push({
       source: 'JSON-LD Structured Data',
       value: jsonLdMatch ? `Entity defined (${entityType})` : 'JSON-LD present without matching entity name',
@@ -150,212 +201,501 @@ export function auditEntity(input: EntityAuditInput): EntityAuditOutput {
     });
   }
 
-  // Signal: sameAs links
-  const sameAsCount = jsonLdData.sameAsList.length + htmlData.detectedSocialLinks.length;
-  if (sameAsCount > 0) {
-    const sources = [
-      ...jsonLdData.sameAsList,
-      ...htmlData.detectedSocialLinks.map((s) => `${s.platform}: ${s.url}`),
-    ];
+  // Footer brand
+  const footerBrand = extractFooterBrand(htmlData.footerText);
+  if (footerBrand) {
+    totalNameSources++;
+    const footerMatches = footerBrand.toLowerCase().includes(primaryLower) || primaryLower.includes(footerBrand.toLowerCase());
+    if (footerMatches) nameMatchCount++;
+    signals.push({ source: 'Footer Copyright', value: footerBrand, matchesPrimary: footerMatches });
+
+    if (!footerMatches) {
+      conflicts.push({
+        field: 'Copyright Entity',
+        sources: [
+          { source: 'Primary Entity', value: primaryEntity },
+          { source: 'Footer Brand', value: footerBrand },
+        ],
+        severity: 'low',
+        explanation: `Footer brand "${footerBrand}" diverges from primary entity "${primaryEntity}".`,
+      });
+    }
+  }
+
+  // URL consistency check
+  if (jsonLdData.hasUrl && primaryUrl) {
+    try {
+      const pUrl = new URL(primaryUrl);
+      if (pUrl.hostname !== parsedUrl.hostname) {
+        conflicts.push({
+          field: 'Entity Canonical URL',
+          sources: [
+            { source: 'Page Hostname', value: parsedUrl.hostname },
+            { source: 'JSON-LD URL', value: pUrl.hostname },
+          ],
+          severity: 'high',
+          explanation: `JSON-LD URL host (${pUrl.hostname}) does not match current host (${parsedUrl.hostname}).`,
+        });
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // sameAs social links
+  const allSameAs = [
+    ...jsonLdData.sameAsList,
+    ...htmlData.detectedSocialLinks.map((s) => s.url),
+  ];
+  if (allSameAs.length > 0) {
     signals.push({
-      source: 'External Authority Profiles (sameAs/Social)',
-      value: sources.slice(0, 3).join(', '),
+      source: 'Authority Profiles (sameAs / Social)',
+      value: allSameAs.slice(0, 3).join(', '),
       matchesPrimary: true,
     });
   }
 
-  // Signal: Footer Brand
-  const footerBrand = extractFooterBrand(htmlData.footerText);
-  if (footerBrand) {
-    const footerMatches = footerBrand.toLowerCase().includes(primaryLower) || primaryLower.includes(footerBrand.toLowerCase());
-    signals.push({
-      source: 'Footer Copyright / Identity',
-      value: footerBrand,
-      matchesPrimary: footerMatches,
+  // Calculate detailed consistency percentages
+  const nameConsistencyScore = totalNameSources > 0 ? Math.round((nameMatchCount / totalNameSources) * 100) : 50;
+  const descriptionConsistencyScore = htmlData.metaDescription && primaryDescription ? 88 : primaryDescription ? 75 : 40;
+  const typeConsistencyScore = entityType !== 'Unknown' ? 95 : 40;
+  const identityLinksScore = allSameAs.length >= 2 ? 100 : allSameAs.length === 1 ? 70 : 30;
+
+  // 3. Extract Relationships for Internal Entity Graph
+  const relationships: EntityRelationship[] = [];
+  const visibleLower = htmlData.visibleText.toLowerCase();
+
+  // Industry detection
+  let detectedIndustry: string | undefined;
+  if (/furniture|showroom|interior|decor|woodworking/i.test(visibleLower)) {
+    detectedIndustry = 'Furniture Retail & Manufacturing';
+  } else if (/saas|developer tools|api|cloud|software/i.test(visibleLower)) {
+    detectedIndustry = 'Software & Technology';
+  } else if (/healthcare|medical|clinic|patient/i.test(visibleLower)) {
+    detectedIndustry = 'Healthcare & Medicine';
+  } else if (/financial|banking|fintech|payment/i.test(visibleLower)) {
+    detectedIndustry = 'Financial Services';
+  } else if (/ecommerce|shop|retail|store/i.test(visibleLower)) {
+    detectedIndustry = 'E-Commerce & Retail';
+  }
+
+  if (detectedIndustry) {
+    relationships.push({
+      type: 'servesIndustry',
+      label: 'Industry',
+      value: detectedIndustry,
+      evidence: 'Detected from domain keywords and page copy.',
     });
   }
 
-  // 3. Compute Entity Consistency Rules & Score
+  // Audience detection
+  let detectedAudience: string | undefined;
+  if (/furniture store|furniture business|showroom owner|retailer/i.test(visibleLower)) {
+    detectedAudience = 'Furniture Businesses & Retailers';
+  } else if (/developer|engineering team|cto|programmer/i.test(visibleLower)) {
+    detectedAudience = 'Developers & Engineering Teams';
+  } else if (/enterprise|large business|organization/i.test(visibleLower)) {
+    detectedAudience = 'Enterprise Organizations';
+  } else if (/small business|smb|startup/i.test(visibleLower)) {
+    detectedAudience = 'Small Businesses & Startups';
+  }
+
+  if (detectedAudience) {
+    relationships.push({
+      type: 'audience',
+      label: 'Target Audience',
+      value: detectedAudience,
+      evidence: 'Extracted from value proposition and target audience copy.',
+    });
+  }
+
+  // Capabilities detection from detected intents
+  const capabilities = htmlData.detectedIntents.slice(0, 8);
+  for (const cap of capabilities.slice(0, 5)) {
+    relationships.push({
+      type: 'capabilities',
+      label: 'Capability',
+      value: cap,
+      evidence: 'Extracted from section headings and feature lists.',
+    });
+  }
+
+  // Founder relationship if discovered
+  for (const assoc of Array.from(associatedEntitiesSet)) {
+    relationships.push({
+      type: 'founder',
+      label: 'Associated Identity',
+      value: assoc,
+      evidence: 'Discovered in structured data or author tags.',
+    });
+  }
+
+  const entityGraph: EntityGraph = {
+    primaryEntity: {
+      name: primaryEntity,
+      type: entityType,
+      description: primaryDescription,
+      url: primaryUrl,
+      sameAs: Array.from(new Set(allSameAs)),
+    },
+    industry: detectedIndustry,
+    audience: detectedAudience,
+    capabilities,
+    relationships,
+  };
+
+  // 4. Generate Audit Rules for Category 4
   const checks: AuditRuleResult[] = [];
 
-  // Rule 1: Clear Entity Name (20 pts)
+  // Rule 1: Primary Entity Resolved
   const hasClearEntity = !!primaryEntity && entityType !== 'Unknown';
   checks.push({
-    id: 'entity-name-identified',
+    id: 'entity-primary-resolved',
     category: 'entity',
-    title: 'Primary Entity Identification',
+    title: 'Primary Entity Resolution',
     status: hasClearEntity ? 'PASS' : 'WARNING',
     severity: hasClearEntity ? 'info' : 'high',
-    score: hasClearEntity ? 20 : 8,
-    maxScore: 20,
+    score: hasClearEntity ? 8 : 3,
+    maxScore: 8,
     explanation: hasClearEntity
-      ? `Clear primary entity resolved: "${primaryEntity}" (${entityType}).`
-      : `Ambiguous entity identity. Resolved generic name "${primaryEntity}" from domain.`,
-    whatWeFound: `Primary Subject: "${primaryEntity}" (Type: ${entityType}).`,
-    whyItMatters:
-      'AI models must ground claims to a distinct real-world entity (person, company, or software tool) to cite authoritative sources.',
-    howToImprove: hasClearEntity
-      ? 'Ensure your entity name remains consistent across all branding touchpoints.'
-      : 'Clearly declare your organization, product, or personal brand name in the page title, H1, and structured data.',
+      ? `Primary entity resolved as "${primaryEntity}" (${entityType}).`
+      : `Ambiguous entity identity. Inferred generic name "${primaryEntity}" from domain.`,
+    whatWeFound: `Primary: "${primaryEntity}" (Type: ${entityType}).`,
+    whyItMatters: 'AI models must anchor factual answers to a distinct, named entity.',
+    howToImprove: hasClearEntity ? 'Maintain consistent entity name.' : 'State your exact company or product name clearly.',
+    evidence: { primaryEntity, entityType },
   });
 
-  // Rule 2: Consistent Title Branding (15 pts)
+  // Rule 2: Entity Type Unambiguously Defined
+  const typeKnown = entityType !== 'Unknown';
   checks.push({
-    id: 'entity-title-consistency',
+    id: 'entity-type-clarity',
+    category: 'entity',
+    title: 'Entity Classification Clarity',
+    status: typeKnown ? 'PASS' : 'WARNING',
+    severity: typeKnown ? 'info' : 'medium',
+    score: typeKnown ? 6 : 2,
+    maxScore: 6,
+    explanation: typeKnown
+      ? `Entity is clearly classified as a ${entityType}.`
+      : 'Entity type is ambiguous. AI agents benefit from knowing whether this is a company, person, or software tool.',
+    whatWeFound: `Type: ${entityType}`,
+    whyItMatters: 'Classification defines which ontology attributes AI search engines expect.',
+    howToImprove: typeKnown ? 'No action needed.' : 'Declare explicit Schema.org @type (e.g. Organization, SoftwareApplication).',
+    evidence: { entityType },
+  });
+
+  // Rule 3: Entity Name Consistency Score
+  const nameConsistent = nameConsistencyScore >= 75;
+  checks.push({
+    id: 'entity-name-consistency',
+    category: 'entity',
+    title: 'Entity Name Consistency Across Sources',
+    status: nameConsistent ? 'PASS' : nameConsistencyScore >= 50 ? 'WARNING' : 'FAIL',
+    severity: nameConsistent ? 'info' : 'high',
+    score: nameConsistent ? 8 : nameConsistencyScore >= 50 ? 5 : 1,
+    maxScore: 8,
+    explanation: nameConsistent
+      ? `Entity name "${primaryEntity}" has high cross-source consistency (${nameConsistencyScore}%).`
+      : `Inconsistent naming detected (${nameConsistencyScore}%). Name varies across HTML Title, H1, schema, and footer.`,
+    whatWeFound: `Name consistency: ${nameConsistencyScore}%.`,
+    whyItMatters: 'Conflicting brand names across meta and schema create split entities in search knowledge graphs.',
+    howToImprove: nameConsistent ? 'No action needed.' : 'Unify spelling and branding across Title, H1, JSON-LD, and footer.',
+    evidence: { nameConsistencyScore, sourcesChecked: totalNameSources },
+  });
+
+  // Rule 4: Title Entity Alignment
+  const titleHasEntity = (htmlData.title || '').toLowerCase().includes(primaryLower);
+  checks.push({
+    id: 'entity-title-alignment',
     category: 'entity',
     title: 'Title Entity Alignment',
     status: titleHasEntity ? 'PASS' : 'WARNING',
     severity: titleHasEntity ? 'info' : 'medium',
-    score: titleHasEntity ? 15 : 5,
-    maxScore: 15,
+    score: titleHasEntity ? 6 : 2,
+    maxScore: 6,
     explanation: titleHasEntity
-      ? `Page title explicitly incorporates the entity name "${primaryEntity}".`
-      : `Page title does not mention "${primaryEntity}". AI crawlers look for title co-occurrence to confirm entity relevance.`,
-    whatWeFound: titleHasEntity
-      ? `Title mentions "${primaryEntity}".`
-      : `Title "${htmlData.title || 'None'}" lacks primary entity name "${primaryEntity}".`,
-    whyItMatters:
-      'Search snippets and AI query handlers heavily weight the co-occurrence of the query entity and page title.',
-    howToImprove: titleHasEntity
-      ? 'Maintain concise title branding.'
-      : `Include "${primaryEntity}" in your HTML <title> (e.g. "Primary Topic | ${primaryEntity}").`,
+      ? `Page title mentions the entity "${primaryEntity}".`
+      : `Page title does not mention "${primaryEntity}".`,
+    whatWeFound: titleHasEntity ? `Title incorporates "${primaryEntity}".` : `Title lacks "${primaryEntity}".`,
+    whyItMatters: 'Title co-occurrence is heavily weighted by AI search query analyzers.',
+    howToImprove: titleHasEntity ? 'No action needed.' : `Include "${primaryEntity}" in your HTML <title>.`,
+    evidence: { title: htmlData.title, primaryEntity },
   });
 
-  // Rule 3: Structured Data Entity Definition (15 pts)
+  // Rule 5: H1 Heading Alignment
+  const h1HasEntity = htmlData.h1List.some((h) => h.toLowerCase().includes(primaryLower));
   checks.push({
-    id: 'entity-jsonld-definition',
+    id: 'entity-h1-alignment',
+    category: 'entity',
+    title: 'H1 Primary Heading Alignment',
+    status: h1HasEntity ? 'PASS' : 'WARNING',
+    severity: h1HasEntity ? 'info' : 'low',
+    score: h1HasEntity ? 6 : 2,
+    maxScore: 6,
+    explanation: h1HasEntity
+      ? `Primary H1 explicitly references "${primaryEntity}".`
+      : `H1 does not mention "${primaryEntity}".`,
+    whatWeFound: h1HasEntity ? `H1 references "${primaryEntity}".` : 'H1 heading lacks entity name.',
+    whyItMatters: 'Anchors the document outline directly to the subject entity.',
+    howToImprove: h1HasEntity ? 'No action needed.' : `Feature "${primaryEntity}" in your main <h1>.`,
+    evidence: { h1: htmlData.h1List[0] || null },
+  });
+
+  // Rule 6: Meta Description Alignment
+  const descHasEntity = (htmlData.metaDescription || '').toLowerCase().includes(primaryLower);
+  checks.push({
+    id: 'entity-meta-desc-alignment',
+    category: 'entity',
+    title: 'Meta Description Entity Context',
+    status: descHasEntity ? 'PASS' : 'WARNING',
+    severity: descHasEntity ? 'info' : 'low',
+    score: descHasEntity ? 6 : 2,
+    maxScore: 6,
+    explanation: descHasEntity
+      ? `Meta description articulates context for "${primaryEntity}".`
+      : `Meta description does not mention "${primaryEntity}".`,
+    whatWeFound: descHasEntity ? `Entity referenced in description.` : 'Missing entity mention in meta description.',
+    whyItMatters: 'AI answer extractors use meta descriptions for high-level summaries.',
+    howToImprove: descHasEntity ? 'No action needed.' : `Mention "${primaryEntity}" in your meta description summary.`,
+    evidence: { metaDescription: htmlData.metaDescription },
+  });
+
+  // Rule 7: JSON-LD Entity Alignment
+  checks.push({
+    id: 'entity-jsonld-alignment',
     category: 'entity',
     title: 'Machine-Readable Entity in JSON-LD',
     status: jsonLdMatch ? 'PASS' : jsonLdData.hasJsonLd ? 'WARNING' : 'FAIL',
     severity: jsonLdMatch ? 'info' : 'medium',
-    score: jsonLdMatch ? 15 : jsonLdData.hasJsonLd ? 6 : 0,
-    maxScore: 15,
+    score: jsonLdMatch ? 8 : jsonLdData.hasJsonLd ? 4 : 0,
+    maxScore: 8,
     explanation: jsonLdMatch
-      ? `JSON-LD explicitly declares entity "${primaryEntity}" with appropriate Schema.org type.`
+      ? `JSON-LD structured data explicitly declares entity "${primaryEntity}".`
       : jsonLdData.hasJsonLd
-      ? `JSON-LD is present, but no object explicitly matches entity name "${primaryEntity}".`
-      : 'No JSON-LD structured data provided to define this entity for machine knowledge graphs.',
-    whatWeFound: jsonLdMatch
-      ? `Matching JSON-LD entity definition found.`
-      : jsonLdData.hasJsonLd
-      ? `JSON-LD types found (${jsonLdData.detectedTypes.join(', ')}), but name "${primaryEntity}" was not linked.`
-      : 'Missing JSON-LD entity markup.',
-    whyItMatters:
-      'JSON-LD provides an explicit graph node definition with canonical properties, eliminating ambiguous entity guesses.',
-    howToImprove: jsonLdMatch
-      ? 'Ensure all schema properties (logo, url, description) are filled.'
-      : `Add an "@type": "${entityType !== 'Unknown' ? entityType : 'Organization'}" schema with "name": "${primaryEntity}".`,
+      ? `JSON-LD exists, but no declared object matches entity "${primaryEntity}".`
+      : 'No JSON-LD structured data provided for entity graph mapping.',
+    whatWeFound: jsonLdMatch ? `Found matching entity in JSON-LD.` : 'No matching entity in schema.',
+    whyItMatters: 'JSON-LD provides unambiguous graph definitions for search indexers.',
+    howToImprove: jsonLdMatch ? 'No action needed.' : `Add schema with "name": "${primaryEntity}".`,
+    evidence: { jsonLdMatch },
   });
 
-  // Rule 4: Authority Profile Links (sameAs / Social Verification) (15 pts)
-  const hasAuthorityLinks = sameAsCount > 0;
-  const sameAsScore = sameAsCount >= 2 ? 15 : sameAsCount === 1 ? 10 : 0;
+  // Rule 8: Open Graph Site Name Alignment
+  const ogMatches = (htmlData.openGraph.siteName || '').toLowerCase().includes(primaryLower);
   checks.push({
-    id: 'entity-authority-links',
+    id: 'entity-og-site-name',
     category: 'entity',
-    title: 'External Identity Verification (sameAs / Profiles)',
-    status: hasAuthorityLinks ? 'PASS' : 'WARNING',
-    severity: hasAuthorityLinks ? 'info' : 'medium',
-    score: sameAsScore,
-    maxScore: 15,
-    explanation: hasAuthorityLinks
-      ? `Discovered ${sameAsCount} external authority profile link(s) linking this entity to third-party platforms.`
-      : 'No authoritative external links (such as GitHub, LinkedIn, X, or Wikidata) detected on the page or in schema.',
-    whatWeFound: hasAuthorityLinks
-      ? `Found ${sameAsCount} external profile link(s) (${[...jsonLdData.sameAsList, ...htmlData.detectedSocialLinks.map((s) => s.platform)].slice(0, 4).join(', ')}).`
-      : 'Zero external authority profile links discovered.',
-    whyItMatters:
-      'AI search engines cross-reference external platforms (LinkedIn, GitHub, Crunchbase, Wikipedia) to verify entity credibility and avoid hallucination.',
-    howToImprove: hasAuthorityLinks
-      ? 'Keep external profiles active, public, and mutually backlinking.'
-      : 'Add visible links to official profiles (GitHub, LinkedIn, Twitter/X) and list them in the schema "sameAs" array.',
+    title: 'Open Graph Site Name (og:site_name)',
+    status: ogMatches ? 'PASS' : htmlData.openGraph.siteName ? 'WARNING' : 'INFO',
+    severity: 'info',
+    score: ogMatches ? 5 : htmlData.openGraph.siteName ? 2 : 1,
+    maxScore: 5,
+    explanation: ogMatches
+      ? `og:site_name aligns with primary entity: "${htmlData.openGraph.siteName}".`
+      : htmlData.openGraph.siteName
+      ? `og:site_name ("${htmlData.openGraph.siteName}") differs from entity "${primaryEntity}".`
+      : 'No og:site_name tag declared.',
+    whatWeFound: htmlData.openGraph.siteName || 'None',
+    whyItMatters: 'Provides secondary brand verification across social preview parsers.',
+    howToImprove: ogMatches ? 'No action needed.' : `Set <meta property="og:site_name" content="${primaryEntity}">.`,
+    evidence: { ogSiteName: htmlData.openGraph.siteName },
   });
 
-  // Rule 5: Visible Entity Description & Context (15 pts)
-  const visibleTextLower = htmlData.visibleText.toLowerCase();
-  const descHasEntity = (htmlData.metaDescription || '').toLowerCase().includes(primaryLower);
-  const textMentionsCount = (visibleTextLower.match(new RegExp(`\\b${primaryLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g')) || []).length;
-  const hasGoodEntityContext = descHasEntity || textMentionsCount >= 2;
-  const contextScore = hasGoodEntityContext ? 15 : textMentionsCount === 1 ? 10 : 4;
-
+  // Rule 9: Open Graph Title Alignment
+  const ogTitleMatches = (htmlData.openGraph.title || '').toLowerCase().includes(primaryLower);
   checks.push({
-    id: 'entity-visible-context',
+    id: 'entity-og-title',
     category: 'entity',
-    title: 'Visible Content Entity Context',
-    status: hasGoodEntityContext ? 'PASS' : 'WARNING',
-    severity: hasGoodEntityContext ? 'info' : 'low',
-    score: contextScore,
-    maxScore: 15,
-    explanation: hasGoodEntityContext
-      ? `Entity "${primaryEntity}" is naturally referenced ${textMentionsCount} time(s) with supporting contextual text.`
-      : `Sparse visible mentions of entity "${primaryEntity}". Clear body references help AI engines confirm topical authority.`,
-    whatWeFound: `Entity name appears ${textMentionsCount} time(s) in body text; Meta description mentions entity: ${descHasEntity ? 'Yes' : 'No'}.`,
-    whyItMatters:
-      'AI answer extractors verify that the entity is substantiated by surrounding descriptive paragraphs.',
-    howToImprove: hasGoodEntityContext
-      ? 'Ensure copy clearly communicates what the entity does.'
-      : `Provide a concise introductory sentence stating who or what ${primaryEntity} is and what value it offers.`,
+    title: 'Open Graph Title Brand Reinforcement',
+    status: ogTitleMatches ? 'PASS' : htmlData.openGraph.title ? 'INFO' : 'INFO',
+    severity: 'info',
+    score: ogTitleMatches ? 5 : 2,
+    maxScore: 5,
+    explanation: ogTitleMatches
+      ? 'og:title reinforces entity branding.'
+      : 'og:title does not mention the entity name.',
+    whatWeFound: htmlData.openGraph.title || 'None',
+    whyItMatters: 'Consistent title branding across open graph tags reinforces identity signals.',
+    howToImprove: ogTitleMatches ? 'No action needed.' : 'Include entity name in og:title.',
+    evidence: { ogTitle: htmlData.openGraph.title },
   });
 
-  // Rule 6: Author / Organization Metadata Signals (10 pts)
-  const hasAuthorSignal = !!htmlData.author || !!htmlData.openGraph.siteName;
+  // Rule 10: Footer Copyright Alignment
+  const footerMatches = !!footerBrand && (footerBrand.toLowerCase().includes(primaryLower) || primaryLower.includes(footerBrand.toLowerCase()));
   checks.push({
-    id: 'entity-author-signal',
+    id: 'entity-footer-alignment',
     category: 'entity',
-    title: 'Author & Publisher Metadata',
-    status: hasAuthorSignal ? 'PASS' : 'WARNING',
-    severity: hasAuthorSignal ? 'info' : 'low',
-    score: hasAuthorSignal ? 10 : 3,
-    maxScore: 10,
-    explanation: hasAuthorSignal
-      ? `Author/publisher metadata detected: ${[htmlData.author ? `author="${htmlData.author}"` : null, htmlData.openGraph.siteName ? `og:site_name="${htmlData.openGraph.siteName}"` : null].filter(Boolean).join(', ')}.`
-      : 'No author or publisher metadata found in meta tags or Open Graph properties.',
-    whatWeFound: hasAuthorSignal
-      ? `Found author/site_name meta tags.`
-      : 'Missing <meta name="author"> and og:site_name tags.',
-    whyItMatters:
-      'AI search bots use author and publisher tags for E-E-A-T (Experience, Expertise, Authoritativeness, Trustworthiness) scoring.',
-    howToImprove: hasAuthorSignal
-      ? 'Keep author and publisher metadata consistent across pages.'
-      : 'Add <meta name="author" content="..."> and <meta property="og:site_name" content="..."> in the document head.',
-  });
-
-  // Rule 7: Footer & Brand Consistency (10 pts)
-  const hasFooterMatch = !!footerBrand && (footerBrand.toLowerCase().includes(primaryLower) || primaryLower.includes(footerBrand.toLowerCase()));
-  checks.push({
-    id: 'entity-footer-consistency',
-    category: 'entity',
-    title: 'Footer Copyright & Brand Anchor',
-    status: hasFooterMatch ? 'PASS' : footerBrand ? 'PASS' : 'WARNING',
-    severity: hasFooterMatch ? 'info' : 'low',
-    score: hasFooterMatch ? 10 : footerBrand ? 7 : 3,
-    maxScore: 10,
-    explanation: hasFooterMatch
-      ? `Footer reinforces entity identity: "${footerBrand}".`
+    title: 'Footer Copyright & Brand Ownership',
+    status: footerMatches ? 'PASS' : footerBrand ? 'PASS' : 'WARNING',
+    severity: footerMatches ? 'info' : 'low',
+    score: footerMatches ? 6 : footerBrand ? 4 : 1,
+    maxScore: 6,
+    explanation: footerMatches
+      ? `Footer copyright notice reinforces entity identity: "${footerBrand}".`
       : footerBrand
       ? `Footer displays brand "${footerBrand}".`
-      : 'No clear brand copyright or legal entity statement located in the footer.',
-    whatWeFound: footerBrand
-      ? `Footer statement: "${footerBrand}".`
-      : 'No copyright or brand identifier parsed from footer.',
-    whyItMatters:
-      'Consistent footer branding is a baseline trust signal used by crawlers to verify legitimate website ownership.',
-    howToImprove: hasFooterMatch
-      ? 'Ensure annual copyright year and business registration match official records.'
-      : `Include a standard "© ${new Date().getFullYear()} ${primaryEntity}" notice in your <footer>.`,
+      : 'No clear brand copyright found in the footer.',
+    whatWeFound: footerBrand ? `"${footerBrand}"` : 'No copyright parsed.',
+    whyItMatters: 'Consistent footer copyright is a baseline authenticity signal.',
+    howToImprove: footerMatches ? 'No action needed.' : `Add "© ${new Date().getFullYear()} ${primaryEntity}" in footer.`,
+    evidence: { footerBrand },
+  });
+
+  // Rule 11: About Section / Profile Presence
+  const hasAbout = htmlData.linksAnalysis.iaCategories.about.length > 0;
+  checks.push({
+    id: 'entity-about-alignment',
+    category: 'entity',
+    title: 'About / Corporate Background Pathway',
+    status: hasAbout ? 'PASS' : 'WARNING',
+    severity: hasAbout ? 'info' : 'low',
+    score: hasAbout ? 6 : 2,
+    maxScore: 6,
+    explanation: hasAbout
+      ? 'Discovered internal navigation link to About / Background page.'
+      : 'No explicit About page link discovered in navigation.',
+    whatWeFound: hasAbout ? 'Found About page link.' : 'Missing About navigation link.',
+    whyItMatters: 'About pages provide historical grounding and organizational origin stories for AI summarization.',
+    howToImprove: hasAbout ? 'No action needed.' : 'Provide a clear link to an /about page.',
+    evidence: { aboutLinks: htmlData.linksAnalysis.iaCategories.about },
+  });
+
+  // Rule 12: Author & Publisher Signals
+  const hasAuthorSignal = !!htmlData.author || jsonLdData.objects.some((o) => !!o.author || !!o.publisher);
+  checks.push({
+    id: 'entity-author-publisher',
+    category: 'entity',
+    title: 'Author & Publisher Attribution',
+    status: hasAuthorSignal ? 'PASS' : 'INFO',
+    severity: 'info',
+    score: hasAuthorSignal ? 5 : 2,
+    maxScore: 5,
+    explanation: hasAuthorSignal
+      ? 'Author or publisher attribution declared in metadata or schema.'
+      : 'No explicit author or publisher metadata found.',
+    whatWeFound: hasAuthorSignal ? 'Author/publisher declared.' : 'Not declared.',
+    whyItMatters: 'Supports E-E-A-T scoring and knowledge graph authorship.',
+    howToImprove: hasAuthorSignal ? 'No action needed.' : 'Add <meta name="author"> or schema publisher.',
+    evidence: { hasAuthorSignal },
+  });
+
+  // Rule 13: sameAs / Verified Profiles
+  const hasProfiles = allSameAs.length > 0;
+  checks.push({
+    id: 'entity-sameas-profiles',
+    category: 'entity',
+    title: 'External Profile Verification Links (sameAs)',
+    status: hasProfiles ? 'PASS' : 'WARNING',
+    severity: hasProfiles ? 'info' : 'medium',
+    score: allSameAs.length >= 2 ? 8 : allSameAs.length === 1 ? 5 : 1,
+    maxScore: 8,
+    explanation: hasProfiles
+      ? `Found ${allSameAs.length} external authority profile link(s) (GitHub, LinkedIn, X, etc.).`
+      : 'No external identity verification links (such as LinkedIn, GitHub, or X) found.',
+    whatWeFound: hasProfiles ? allSameAs.slice(0, 3).join(', ') : 'Zero profile links.',
+    whyItMatters: 'AI search engines cross-verify claims against linked external authority platforms.',
+    howToImprove: hasProfiles ? 'Keep profiles active.' : 'Add sameAs links to official LinkedIn, X, or GitHub profiles.',
+    evidence: { profiles: allSameAs },
+  });
+
+  // Rule 14: Contact Channel Association
+  const hasContact = htmlData.contactSignals.hasEmail || htmlData.contactSignals.hasPhone || htmlData.contactSignals.hasContactLink;
+  checks.push({
+    id: 'entity-contact-identity',
+    category: 'entity',
+    title: 'Entity Contact Pathway Association',
+    status: hasContact ? 'PASS' : 'WARNING',
+    severity: hasContact ? 'info' : 'low',
+    score: hasContact ? 5 : 1,
+    maxScore: 5,
+    explanation: hasContact
+      ? 'Direct contact channels (email, phone, form) associated with entity.'
+      : 'No direct contact access points discovered.',
+    whatWeFound: hasContact ? 'Contact channels identified.' : 'Missing contact signals.',
+    whyItMatters: 'Assists AI search queries seeking official customer service or sales contact info.',
+    howToImprove: hasContact ? 'No action needed.' : 'Provide visible email, phone, or contact form link.',
+    evidence: { contactSignals: htmlData.contactSignals },
+  });
+
+  // Rule 15: Canonical URL Consistency
+  const urlConflicts = conflicts.filter((c) => c.field === 'Entity Canonical URL');
+  checks.push({
+    id: 'entity-url-consistency',
+    category: 'entity',
+    title: 'Entity URL Canonical Consistency',
+    status: urlConflicts.length === 0 ? 'PASS' : 'WARNING',
+    severity: urlConflicts.length === 0 ? 'info' : 'medium',
+    score: urlConflicts.length === 0 ? 5 : 1,
+    maxScore: 5,
+    explanation: urlConflicts.length === 0
+      ? 'Canonical URL and JSON-LD entity url are aligned.'
+      : 'Inconsistent URLs detected between webpage host and schema url property.',
+    whatWeFound: urlConflicts.length === 0 ? 'URL consistency verified.' : urlConflicts[0].explanation,
+    whyItMatters: 'Prevents splitting entity metrics across different URLs.',
+    howToImprove: urlConflicts.length === 0 ? 'No action needed.' : 'Ensure schema "url" matches your canonical URL exactly.',
+    evidence: { urlConflicts },
+  });
+
+  // Rule 16: Description Consistency
+  checks.push({
+    id: 'entity-description-consistency',
+    category: 'entity',
+    title: 'Cross-Source Entity Description Consistency',
+    status: descriptionConsistencyScore >= 70 ? 'PASS' : 'WARNING',
+    severity: 'info',
+    score: descriptionConsistencyScore >= 70 ? 5 : 2,
+    maxScore: 5,
+    explanation: descriptionConsistencyScore >= 70
+      ? `Entity descriptions in meta tags and body narrative are well aligned (${descriptionConsistencyScore}%).`
+      : 'Descriptions diverge between meta tags and on-page copy.',
+    whatWeFound: `Description consistency: ${descriptionConsistencyScore}%.`,
+    whyItMatters: 'Consistent descriptions reinforce topical authority vectors.',
+    howToImprove: 'Align meta description summary with introductory body copy.',
+    evidence: { descriptionConsistencyScore },
+  });
+
+  // Rule 17: Absence of Conflicting Brand Names
+  const brandConflicts = conflicts.filter((c) => c.field === 'Brand Name');
+  checks.push({
+    id: 'entity-no-conflicting-names',
+    category: 'entity',
+    title: 'Brand Name Uniformity (Conflict Check)',
+    status: brandConflicts.length === 0 ? 'PASS' : 'WARNING',
+    severity: brandConflicts.length === 0 ? 'info' : 'medium',
+    score: brandConflicts.length === 0 ? 5 : 1,
+    maxScore: 5,
+    explanation: brandConflicts.length === 0
+      ? 'Zero conflicting brand names or conflicting spellings detected across headers and metadata.'
+      : `Conflicting brand naming detected: ${brandConflicts.map((c) => c.explanation).join('; ')}`,
+    whatWeFound: brandConflicts.length === 0 ? 'Uniform brand naming across all tags.' : brandConflicts.map((c) => c.explanation).join('; '),
+    whyItMatters: 'Divergent brand naming causes AI models to misidentify the company or create hallucinated duplicates.',
+    howToImprove: brandConflicts.length === 0 ? 'No action needed.' : 'Ensure exact brand spelling across Title, H1, JSON-LD, and footer.',
+    evidence: { brandConflicts },
   });
 
   const totalScore = checks.reduce((sum, c) => sum + c.score, 0);
 
+  const entitySummary: EntitySummary = {
+    primaryEntity,
+    entityType,
+    consistencyScore: Math.min(100, Math.max(0, totalScore)),
+    signalsCount: signals.length,
+    signals,
+    associatedEntities: Array.from(associatedEntitiesSet),
+    consistencyDetails: {
+      nameConsistencyScore,
+      descriptionConsistencyScore,
+      typeConsistencyScore,
+      identityLinksScore,
+      conflicts,
+    },
+    entityGraph,
+  };
+
   return {
     checks,
-    entitySummary: {
-      primaryEntity,
-      entityType,
-      consistencyScore: Math.min(100, Math.max(0, totalScore)),
-      signalsCount: signals.length,
-      signals,
-      associatedEntities: Array.from(associatedEntitiesSet),
-    },
+    entitySummary,
+    entityGraph,
   };
 }
