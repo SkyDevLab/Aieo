@@ -4,19 +4,24 @@ import './globals.css';
 import { Header } from '@/components/Header';
 import { FAQ_ITEMS } from '@/lib/faq-data';
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://aieo-checker.skydevlab.com';
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL || 'https://website-aieo.vercel.app';
 const GA_ID = process.env.NEXT_PUBLIC_GA_ID;
 const GOOGLE_VERIFICATION =
   process.env.GOOGLE_SITE_VERIFICATION ||
   process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION ||
-  'xQv4acxrWRAq4ZNV_QA7KP_bXhGXCBeFODGybZWzREw';
+  'psOM6Z4D_l5Dh8b2KTYQJF3f2Iv1RZfegENEF73rxHY';
+
+const SITE_TITLE = 'Website AIEO Checker — Free AI Search & AEO Website Audit Tool';
+const SITE_DESCRIPTION =
+  'Free Website AIEO Checker that audits your website for AI search readiness, AEO, structured data, entity clarity, content structure, crawlability, and answer readiness.';
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  title: 'Website AIEO Checker — Free AI Search & AEO Website Audit Tool',
-  description:
-    'Free Website AIEO Checker that audits your website for AI search readiness, AEO, structured data, entity clarity, content structure, crawlability, and answer readiness.',
+  title: SITE_TITLE,
+  description: SITE_DESCRIPTION,
   applicationName: 'Website AIEO Checker',
+  category: 'technology',
   authors: [{ name: 'SkyDevLab', url: 'https://skydevlab.github.io/Portfolio/' }],
   creator: 'SkyDevLab',
   publisher: 'SkyDevLab',
@@ -28,7 +33,6 @@ export const metadata: Metadata = {
     'AEO checker',
     'answer engine optimization',
     'AI search readiness',
-    'website AI visibility',
     'AI crawler audit',
     'structured data checker',
     'entity SEO',
@@ -46,16 +50,27 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     url: SITE_URL,
-    title: 'Website AIEO Checker — Free AI Search & AEO Website Audit Tool',
-    description:
-      'Free Website AIEO Checker that audits your website for AI search readiness, AEO, structured data, entity clarity, content structure, crawlability, and answer readiness.',
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
     siteName: 'Website AIEO Checker',
+    images: [
+      {
+        url: '/opengraph-image',
+        width: 1200,
+        height: 630,
+        alt: 'Website AIEO Checker — AI Search Readiness Audit',
+      },
+    ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Website AIEO Checker — Free AI Search & AEO Website Audit Tool',
-    description:
-      'Free Website AIEO Checker that audits your website for AI search readiness, AEO, structured data, entity clarity, content structure, crawlability, and answer readiness.',
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    images: ['/opengraph-image'],
+  },
+  icons: {
+    icon: '/icon.svg',
+    shortcut: '/icon.svg',
   },
   robots: {
     index: true,
@@ -154,7 +169,6 @@ export default function RootLayout({
         />
       </head>
       <body className="bg-background text-slate-900 dark:text-slate-100 flex flex-col min-h-screen selection:bg-brand-500 selection:text-white antialiased">
-        {/* Analytics Script if GA_ID is set */}
         {GA_ID && (
           <>
             <Script
@@ -172,16 +186,10 @@ export default function RootLayout({
           </>
         )}
 
-        {/* Top subtle accent line */}
         <div className="w-full h-0.5 bg-gradient-to-r from-brand-600 via-indigo-500 to-cyan-500" />
-
-        {/* Global Navigation Header */}
         <Header />
-
-        {/* Main Content Area */}
         <main className="flex-1 flex flex-col">{children}</main>
 
-        {/* Global Footer */}
         <footer className="border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-surface py-10 mt-auto">
           <div className="max-w-6xl mx-auto px-4 sm:px-6">
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 pb-8 border-b border-slate-200 dark:border-slate-800">
@@ -199,46 +207,25 @@ export default function RootLayout({
                 </p>
               </div>
 
-              {/* Useful Internal & External Links */}
               <nav aria-label="Footer Navigation" className="flex flex-wrap items-center gap-4 sm:gap-6 text-xs text-slate-600 dark:text-slate-400">
-                <a
-                  href="https://skydevlab.github.io/Portfolio/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:text-brand-600 dark:hover:text-brand-400 transition-colors"
-                >
+                <a href="https://skydevlab.github.io/Portfolio/" target="_blank" rel="noopener noreferrer" className="hover:text-brand-600 dark:hover:text-brand-400 transition-colors">
                   Website
                 </a>
-                <a
-                  href="https://github.com/SkyDevLab"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:text-brand-600 dark:hover:text-brand-400 transition-colors"
-                >
+                <a href="https://github.com/SkyDevLab" target="_blank" rel="noopener noreferrer" className="hover:text-brand-600 dark:hover:text-brand-400 transition-colors">
                   GitHub
                 </a>
-                <a
-                  href="#how-it-works"
-                  className="hover:text-brand-600 dark:hover:text-brand-400 transition-colors"
-                >
+                <a href="#how-it-works" className="hover:text-brand-600 dark:hover:text-brand-400 transition-colors">
                   Methodology
                 </a>
-                <a
-                  href="#faq"
-                  className="hover:text-brand-600 dark:hover:text-brand-400 transition-colors"
-                >
+                <a href="#faq" className="hover:text-brand-600 dark:hover:text-brand-400 transition-colors">
                   FAQ
                 </a>
-                <a
-                  href="#audit"
-                  className="hover:text-brand-600 dark:hover:text-brand-400 transition-colors font-medium text-brand-600 dark:text-brand-400"
-                >
+                <a href="#audit" className="hover:text-brand-600 dark:hover:text-brand-400 transition-colors font-medium text-brand-600 dark:text-brand-400">
                   Audit Website
                 </a>
               </nav>
             </div>
 
-            {/* Disclaimer & Transparency */}
             <div className="pt-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 text-xs text-slate-500 dark:text-slate-400">
               <p className="max-w-2xl leading-relaxed text-[11px]">
                 <strong className="text-slate-700 dark:text-slate-300 font-medium">Disclaimer: </strong>
