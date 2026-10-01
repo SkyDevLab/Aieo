@@ -7,7 +7,9 @@ import { FAQ_ITEMS } from '@/lib/faq-data';
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://aieo-checker.skydevlab.com';
 const GA_ID = process.env.NEXT_PUBLIC_GA_ID;
 const GOOGLE_VERIFICATION =
-  process.env.GOOGLE_SITE_VERIFICATION || process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION;
+  process.env.GOOGLE_SITE_VERIFICATION ||
+  process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION ||
+  'xQv4acxrWRAq4ZNV_QA7KP_bXhGXCBeFODGybZWzREw';
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -145,6 +147,7 @@ export default function RootLayout({
 })();`,
           }}
         />
+        <meta name="google-site-verification" content={GOOGLE_VERIFICATION} />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
