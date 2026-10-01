@@ -1,0 +1,17 @@
+# AIEO Checker
+> An open technical auditing tool by SkyDevLab for evaluating AI Engine Optimization and AI Search Readiness.
+
+## Overview
+AIEO Checker provides deterministic evaluation of websites across five key pillars:
+1. AI Crawlability (Robots.txt, HTTPS, Canonical tags, XML sitemaps)
+2. Content Structure (Semantic HTML5 landmarks, Heading hierarchy, Text-to-HTML ratio)
+3. Structured Data (Schema.org JSON-LD graph parsing, sameAs verification)
+4. Entity Clarity (Cross-source entity disambiguation and consistency)
+5. Answer Readiness (Deterministic heuristic coverage of core conversational queries)
+
+## Brand & Creator
+- Built by SkyDevLab
+- Founded & Developed by Surya Pratap Singh
+- Website: https://aieo-checker.skydevlab.com
+- Authoritative profiles:
+  - https://skydevlab.com
