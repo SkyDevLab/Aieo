@@ -1,17 +1,28 @@
-# AIEO Checker
-> An open technical auditing tool by SkyDevLab for evaluating AI Engine Optimization and AI Search Readiness.
+# Website AIEO Checker
+
+> A free deterministic website auditing tool by SkyDevLab for AI Engine Optimization (AIEO), Answer Engine Optimization (AEO), and AI search readiness.
 
 ## Overview
-AIEO Checker provides deterministic evaluation of websites across five key pillars:
-1. AI Crawlability (Robots.txt, HTTPS, Canonical tags, XML sitemaps)
-2. Content Structure (Semantic HTML5 landmarks, Heading hierarchy, Text-to-HTML ratio)
-3. Structured Data (Schema.org JSON-LD graph parsing, sameAs verification)
-4. Entity Clarity (Cross-source entity disambiguation and consistency)
-5. Answer Readiness (Deterministic heuristic coverage of core conversational queries)
+
+Website AIEO Checker evaluates publicly accessible website signals across five dimensions:
+
+1. AI Crawlability — robots.txt, AI crawler directives, HTTPS, canonical URLs, HTTP status, XML sitemaps, and llms.txt availability.
+2. Content Structure — semantic HTML, heading hierarchy, page structure, metadata, and content completeness.
+3. Structured Data — Schema.org JSON-LD parsing, recognized entity types, and machine-readable relationships.
+4. Entity Clarity — consistency and clarity of organization, person, website, and related entity signals.
+5. Answer Readiness — deterministic coverage of common questions and factual answer signals.
+
+## Methodology
+
+- Deterministic rules; no generative AI scoring dependency.
+- Scores are based on observable public website signals.
+- Results do not guarantee ranking, indexing, citation, visibility, or recommendation by any specific AI or search system.
 
 ## Brand & Creator
-- Built by SkyDevLab
-- Founded & Developed by Surya Pratap Singh
-- Website: https://aieo-checker.skydevlab.com
-- Authoritative profiles:
-  - https://skydevlab.com
+
+- Product: Website AIEO Checker
+- Built by: SkyDevLab
+- Founded & developed by: Surya Pratap Singh
+- Website: https://website-aieo.vercel.app/
+- SkyDevLab GitHub: https://github.com/SkyDevLab
+- Portfolio: https://skydevlab.github.io/Portfolio/
