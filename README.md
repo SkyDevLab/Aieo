@@ -1,5 +1,10 @@
 # Website AIEO Checker — Free AI Search & AEO Website Audit Tool
 
+[![GitHub](https://img.shields.io/badge/GitHub-SkyDevLab%2FAieo-181717?logo=github)](https://github.com/SkyDevLab/Aieo)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
+**Project:** [SkyDevLab/Aieo](https://github.com/SkyDevLab/Aieo) · **Author:** [Surya Pratap Singh / SkyDevLab](https://github.com/SkyDevLab)
+
 > **Audit your website for AI search readiness, entity clarity, structured data, content structure, and answer readiness.**  
 > Built by **SkyDevLab**
 
@@ -154,7 +159,7 @@ $$\text{Final Score} = (\text{Crawlability} \times 0.20) + (\text{Content} \time
 ### Installation
 ```bash
 # Clone the repository
-git clone https://github.com/suraj/Aieo.git
+git clone https://github.com/SkyDevLab/Aieo.git
 cd Aieo
 
 # Install dependencies
