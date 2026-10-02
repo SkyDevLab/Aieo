@@ -75,7 +75,7 @@ export const UrlAnalyzer: React.FC = () => {
     setCurrentStep(undefined);
 
     try {
-      const response = await fetch('/api/analyze?stream=true', {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || ''}/api/analyze?stream=true`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
