@@ -5,6 +5,16 @@ import { SecurityValidationError } from '@/lib/security/url-validation';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Accept',
+};
+
+export async function OPTIONS() {
+  return new Response(null, { status: 204, headers: corsHeaders });
+}
+
 export async function POST(req: NextRequest) {
   let body: { url?: string; stream?: boolean };
   try {
@@ -12,7 +22,7 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json(
       { error: 'Invalid JSON body. Please provide a { "url": "..." } payload.' },
-      { status: 400 }
+      { status: 400, headers: corsHeaders }
     );
   }
 
@@ -20,7 +30,7 @@ export async function POST(req: NextRequest) {
   if (!rawUrl) {
     return NextResponse.json(
       { error: 'URL is required. Please provide a valid website address.' },
-      { status: 400 }
+      { status: 400, headers: corsHeaders }
     );
   }
 
@@ -77,6 +87,7 @@ export async function POST(req: NextRequest) {
       status: 200,
       headers: {
         'Cache-Control': 'no-store, max-age=0',
+        ...corsHeaders,
       },
     });
   } catch (err: unknown) {
@@ -93,6 +104,6 @@ export async function POST(req: NextRequest) {
         ? 403
         : 400;
 
-    return NextResponse.json({ error: errorMessage }, { status });
+    return NextResponse.json({ error: errorMessage }, { status, headers: corsHeaders });
   }
 }
