@@ -38,10 +38,23 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build
-        run: npm run build
+      - name: Build static GitHub Pages site
+        run: |
+          set -e
+          restore_api() {
+            if [ -d app/api-disabled ]; then
+              mv app/api-disabled app/api
+            fi
+          }
+          trap restore_api EXIT
+          if [ -d app/api ]; then
+            mv app/api app/api-disabled
+          fi
+          npm run build
         env:
+          GITHUB_PAGES: true
           NEXT_PUBLIC_SITE_URL: https://skydevlab.github.io/Aieo/
+          NEXT_PUBLIC_API_BASE_URL: https://website-aieo.vercel.app
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
