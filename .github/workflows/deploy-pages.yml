@@ -41,20 +41,31 @@ jobs:
       - name: Build static GitHub Pages site
         run: |
           set -e
+
+          # GitHub Pages can only serve static output. The audit API remains
+          # deployed on Vercel, so temporarily move the entire API directory
+          # OUTSIDE the Next.js app tree during the static build.
           restore_api() {
-            if [ -d app/api-disabled ]; then
-              mv app/api-disabled app/api
+            if [ -d api-pages-backup ]; then
+              mkdir -p app
+              mv api-pages-backup app/api
             fi
           }
+
           trap restore_api EXIT
+
           if [ -d app/api ]; then
-            mv app/api app/api-disabled
+            mv app/api api-pages-backup
           fi
+
           npm run build
         env:
           GITHUB_PAGES: true
           NEXT_PUBLIC_SITE_URL: https://skydevlab.github.io/Aieo/
           NEXT_PUBLIC_API_BASE_URL: https://website-aieo.vercel.app
+
+      - name: Verify static output
+        run: test -f out/index.html
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
