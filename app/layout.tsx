@@ -12,9 +12,9 @@ const GOOGLE_VERIFICATION =
   process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION ||
   'psOM6Z4D_l5Dh8b2KTYQJF3f2Iv1RZfegENEF73rxHY';
 
-const SITE_TITLE = 'Website AIEO Checker — Free AI Search & AEO Website Audit Tool';
+const SITE_TITLE = 'Website AIEO Checker — Free AIEO, AEO & AI Search Audit';
 const SITE_DESCRIPTION =
-  'Free Website AIEO Checker that audits your website for AI search readiness, AEO, structured data, entity clarity, content structure, crawlability, and answer readiness.';
+  'Free Website AIEO Checker and AIEO check tool by SkyDevLab. Audit AI search readiness, AEO, crawlability, structured data, entity clarity, content structure, and answer readiness.';
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -39,6 +39,14 @@ export const metadata: Metadata = {
     'AI search audit',
     'free AIEO audit',
     'free AEO checker',
+    'website AIEO check',
+    'AIEO website check',
+    'AIEO website checker',
+    'AI search website checker',
+    'AI search SEO checker',
+    'SkyWeb AIEO',
+    'SkyWeb AIEO Checker',
+    'SkyDevLab AIEO',
     'website AI readiness',
   ],
   alternates: {
@@ -98,6 +106,7 @@ export default function RootLayout({
         '@id': `${SITE_URL}/#website`,
         url: SITE_URL,
         name: 'Website AIEO Checker',
+        alternateName: ['AIEO Checker', 'Website AIEO Check', 'SkyWeb AIEO Checker'],
         description:
           'Free website audit tool for AI search readiness and answer engine optimization.',
         publisher: {
@@ -115,7 +124,16 @@ export default function RootLayout({
         '@type': 'WebApplication',
         '@id': `${SITE_URL}/#webapp`,
         name: 'Website AIEO Checker',
+        alternateName: ['AIEO Checker', 'AIEO Website Checker', 'SkyWeb AIEO Checker'],
         applicationCategory: 'DeveloperApplication',
+        featureList: [
+          'AI search readiness audit',
+          'AIEO website check',
+          'AEO website audit',
+          'AI crawler and robots audit',
+          'Structured data and entity audit',
+          'Content structure and answer readiness audit',
+        ],
         operatingSystem: 'All',
         url: SITE_URL,
         description:
